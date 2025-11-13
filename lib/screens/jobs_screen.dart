@@ -1,3 +1,4 @@
+// lib/screens/jobs_screen.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -7,178 +8,115 @@ class JobsScreen extends StatelessWidget {
 
   String get _uid => FirebaseAuth.instance.currentUser!.uid;
 
+  // Query only by therapistId (avoid composite-index issues)
   Stream<QuerySnapshot<Map<String, dynamic>>> get _incomingJobsStream =>
       FirebaseFirestore.instance
           .collection('bookings')
           .where('therapistId', isEqualTo: _uid)
-          .where('status', isEqualTo: 'pending')
-          .orderBy('createdAt', descending: true)
           .snapshots();
 
-  // Create a transaction record when a job completes
-  Future<void> _createTransaction(DocumentSnapshot<Map<String, dynamic>> jobDocument) async {
-    final jobData = jobDocument.data() ?? {};
-    const double earningsAmount = 50.00; // demo; replace with real amount if available
-
-    await FirebaseFirestore.instance.collection('transactions').add({
-      'jobId': jobDocument.id,
-      'therapistId': _uid,
-      'amount': earningsAmount,
-      'dateCompleted': FieldValue.serverTimestamp(),
-      'serviceType': jobData['serviceType'] ?? 'Unknown',
-      'payoutStatus': 'pending',
-    });
-  }
-
-  // Update booking status and create transaction when completed
   Future<void> _updateJobStatus(
       BuildContext context, DocumentSnapshot<Map<String, dynamic>> jobDocument, String newStatus) async {
-    final jobId = jobDocument.id;
     try {
-      await FirebaseFirestore.instance.collection('bookings').doc(jobId).update({
+      await FirebaseFirestore.instance.collection('bookings').doc(jobDocument.id).update({
         'status': newStatus,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
-      if (newStatus == 'completed') {
-        await _createTransaction(jobDocument);
-      }
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Job $newStatus successfully.')),
-        );
-      }
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Job $newStatus')));
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update job: $e')),
-        );
-      }
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
     }
   }
 
-  Future<bool?> _confirmDialog(BuildContext context, String title, String content) {
-    return showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes')),
-        ],
-      ),
-    );
-  }
+  Future<bool?> _confirmDialog(BuildContext context, String title, String content) =>
+      showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+            title: Text(title),
+            content: Text(content),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes')),
+            ],
+          ));
 
   @override
   Widget build(BuildContext context) {
-    // Useful for debugging in dev builds
-    // print('Current Logged-in UID for Query: $_uid');
-
     return Scaffold(
       appBar: AppBar(title: const Text('Jobs')),
       body: SafeArea(
         child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: _incomingJobsStream,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(child: Text('Error: ${snapshot.error}'));
+          builder: (context, snap) {
+            if (snap.hasError) return Center(child: Text('Firestore error: ${snap.error}'));
+            if (snap.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+            final docs = snap.data?.docs ?? [];
+
+            // debug: status counts
+            final statuses = <String, int>{};
+            for (var d in docs) {
+              final st = (d.data()['status'] as String?) ?? 'unknown';
+              statuses[st] = (statuses[st] ?? 0) + 1;
             }
 
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
+            final pending = docs.where((d) => ((d.data()['status'] as String?) ?? '').toLowerCase() == 'pending').toList();
 
-            final docs = snapshot.data?.docs ?? [];
-
-            if (docs.isEmpty) {
-              return const Center(child: Text('No incoming job requests.'));
+            if (pending.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.inbox, size: 56, color: Colors.grey),
+                  const SizedBox(height: 12),
+                  const Text('No incoming job requests (pending).', textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  Text('Total bookings for therapist: ${docs.length}'),
+                  const SizedBox(height: 8),
+                  Text('Status counts: ${statuses.entries.map((e) => '${e.key}:${e.value}').join(', ')}'),
+                  const SizedBox(height: 8),
+                  const Text('Tip: create a booking with status="pending" in Firestore to test.'),
+                ]),
+              );
             }
 
             return ListView.builder(
+              itemCount: pending.length,
               padding: const EdgeInsets.all(12),
-              itemCount: docs.length,
               itemBuilder: (context, index) {
-                final jobDoc = docs[index];
+                final jobDoc = pending[index];
                 final job = jobDoc.data();
                 final service = (job['serviceType'] as String?) ?? 'Service';
-                final clientName = (job['clientName'] as String?) ?? 'Client';
-                final address = job['location']?['address'] as String? ?? '';
-                final scheduled = job['when'] != null
-                    ? '${job['when']['date'] ?? ''} ${job['when']['start'] ?? ''}'
-                    : 'Scheduled time unknown';
-
+                final client = (job['patientName'] as String?) ?? (job['clientName'] as String?) ?? 'Client';
+                final address = job['clientAddress'] as String? ?? (job['location']?['address'] as String? ?? '');
                 return Card(
-                  key: ValueKey(jobDoc.id),
                   margin: const EdgeInsets.only(bottom: 12),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Header: service + client
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                service,
-                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Chip(label: Text(job['status']?.toString().toUpperCase() ?? 'PENDING')),
-                          ],
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        Expanded(child: Text(service, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                        Chip(label: Text(job['status']?.toString().toUpperCase() ?? 'PENDING')),
+                      ]),
+                      const SizedBox(height: 8),
+                      Text('Client: $client'),
+                      if (address.isNotEmpty) ...[const SizedBox(height: 6), Text('Address: $address')],
+                      const SizedBox(height: 12),
+                      Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                        TextButton(
+                          onPressed: () async {
+                            final ok = await _confirmDialog(context, 'Reject booking', 'Reject this booking?');
+                            if (ok == true) await _updateJobStatus(context, jobDoc, 'rejected');
+                          },
+                          child: const Text('REJECT', style: TextStyle(color: Colors.red)),
                         ),
-                        const SizedBox(height: 8),
-                        Text('Client: $clientName'),
-                        const SizedBox(height: 6),
-                        if (address.isNotEmpty) Text('Address: $address'),
-                        const SizedBox(height: 6),
-                        Text('When: $scheduled'),
-                        const SizedBox(height: 12),
-
-                        // Buttons
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: () async {
-                                final ok = await _confirmDialog(context, 'Reject booking', 'Reject this booking?');
-                                if (ok == true) {
-                                  await _updateJobStatus(context, jobDoc, 'rejected');
-                                }
-                              },
-                              child: const Text('REJECT', style: TextStyle(color: Colors.red)),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              onPressed: () async {
-                                // Accept -> typically moves to active jobs, but we update status to accepted here
-                                final ok = await _confirmDialog(context, 'Accept booking', 'Accept this booking?');
-                                if (ok == true) {
-                                  await _updateJobStatus(context, jobDoc, 'accepted');
-                                }
-                              },
-                              child: const Text('ACCEPT'),
-                            ),
-                            const SizedBox(width: 8),
-                            // Complete button for testing/demo — mark job completed and create transaction
-                            OutlinedButton(
-                              onPressed: () async {
-                                final ok = await _confirmDialog(context, 'Complete job', 'Mark this job as completed? This will create a transaction entry.');
-                                if (ok == true) {
-                                  await _updateJobStatus(context, jobDoc, 'completed');
-                                }
-                              },
-                              child: const Text('COMPLETE'),
-                            ),
-                          ],
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final ok = await _confirmDialog(context, 'Accept booking', 'Accept this booking?');
+                            if (ok == true) await _updateJobStatus(context, jobDoc, 'accepted');
+                          },
+                          child: const Text('ACCEPT'),
                         ),
-                      ],
-                    ),
+                      ]),
+                    ]),
                   ),
                 );
               },

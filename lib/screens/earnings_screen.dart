@@ -12,8 +12,11 @@ class EarningsScreen extends StatefulWidget {
 class _EarningsScreenState extends State<EarningsScreen> {
   String get _uid => FirebaseAuth.instance.currentUser!.uid;
 
-  double _totalEarnings = 0.0;
+  // State variables for all timeframes
+  double _dailyEarnings = 0.0;
+  double _weeklyEarnings = 0.0;
   double _monthlyEarnings = 0.0;
+  double _totalEarnings = 0.0;
 
   Stream<QuerySnapshot<Map<String, dynamic>>> get _earningsStream =>
       FirebaseFirestore.instance
@@ -22,16 +25,27 @@ class _EarningsScreenState extends State<EarningsScreen> {
           .orderBy('dateCompleted', descending: true)
           .snapshots();
 
-  // Compute totals from docs (pure function)
+  // --- UPDATED CALCULATION LOGIC ---
   Map<String, double> _computeTotalsFromDocs(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
-    double total = 0.0;
+    
+    double daily = 0.0;
+    double weekly = 0.0;
     double monthly = 0.0;
+    double total = 0.0;
+
     final now = DateTime.now();
+    
+    // Normalize dates to midnight for accurate comparison
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final monthStart = DateTime(now.year, now.month, 1);
+    // Find the Monday of the current week
+    final weekStart = todayStart.subtract(Duration(days: now.weekday - 1));
 
     for (var doc in docs) {
       final data = doc.data();
       final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
+      
       final ts = data['dateCompleted'];
       DateTime? date;
       if (ts is Timestamp) {
@@ -39,40 +53,78 @@ class _EarningsScreenState extends State<EarningsScreen> {
       } else if (ts is DateTime) {
         date = ts;
       }
+      
       if (date == null) continue;
 
+      // 1. Total
       total += amount;
+
+      // 2. Monthly (Same Year AND Same Month)
       if (date.year == now.year && date.month == now.month) {
         monthly += amount;
       }
+
+      // 3. Weekly (On or after this week's Monday)
+      // We check if the transaction date is after or at the same moment as weekStart
+      if (date.isAfter(weekStart) || date.isAtSameMomentAs(weekStart)) {
+        weekly += amount;
+      }
+
+      // 4. Daily (Same Year, Month, and Day)
+      if (date.year == now.year && 
+          date.month == now.month && 
+          date.day == now.day) {
+        daily += amount;
+      }
     }
 
-    return {'total': total, 'monthly': monthly};
+    return {
+      'total': total,
+      'monthly': monthly,
+      'weekly': weekly,
+      'daily': daily,
+    };
   }
+  // --------------------------------
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Earnings')),
+      appBar: AppBar(title: const Text('Earnings Dashboard')),
       body: SafeArea(
         child: Column(
           children: [
-            // Header showing current totals
+            // --- UPDATED HEADER UI ---
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.06),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+              padding: const EdgeInsets.all(16),
+              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+              child: Column(
                 children: [
-                  Text('Total: ₹${_totalEarnings.toStringAsFixed(2)}',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text('This Month: ₹${_monthlyEarnings.toStringAsFixed(2)}'),
+                  // Row 1: Daily & Weekly
+                  Row(
+                    children: [
+                      _buildSummaryCard('Today', _dailyEarnings, Colors.blue),
+                      const SizedBox(width: 12),
+                      _buildSummaryCard('This Week', _weeklyEarnings, Colors.orange),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Row 2: Monthly & Total
+                  Row(
+                    children: [
+                      _buildSummaryCard('This Month', _monthlyEarnings, Colors.purple),
+                      const SizedBox(width: 12),
+                      _buildSummaryCard('Total', _totalEarnings, Colors.green),
+                    ],
+                  ),
                 ],
               ),
             ),
+            // -------------------------
 
-            // StreamBuilder for transaction list and totals
+            const Divider(height: 1),
+
+            // StreamBuilder for transaction list
             Expanded(
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: _earningsStream,
@@ -82,13 +134,15 @@ class _EarningsScreenState extends State<EarningsScreen> {
                   }
 
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    // Reset totals if previously set
-                    if (_totalEarnings != 0.0 || _monthlyEarnings != 0.0) {
+                    // Reset totals if empty
+                    if (_totalEarnings != 0.0) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (mounted) {
                           setState(() {
-                            _totalEarnings = 0.0;
+                            _dailyEarnings = 0.0;
+                            _weeklyEarnings = 0.0;
                             _monthlyEarnings = 0.0;
+                            _totalEarnings = 0.0;
                           });
                         }
                       });
@@ -98,22 +152,23 @@ class _EarningsScreenState extends State<EarningsScreen> {
 
                   final docs = snapshot.data!.docs;
                   final totals = _computeTotalsFromDocs(docs);
-                  final total = totals['total'] ?? 0.0;
-                  final monthly = totals['monthly'] ?? 0.0;
 
                   // Update state only when values changed
-                  if (_totalEarnings != total || _monthlyEarnings != monthly) {
+                  if (_totalEarnings != totals['total']) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) {
                         setState(() {
-                          _totalEarnings = total;
-                          _monthlyEarnings = monthly;
+                          _dailyEarnings = totals['daily'] ?? 0.0;
+                          _weeklyEarnings = totals['weekly'] ?? 0.0;
+                          _monthlyEarnings = totals['monthly'] ?? 0.0;
+                          _totalEarnings = totals['total'] ?? 0.0;
                         });
                       }
                     });
                   }
 
                   return ListView.separated(
+                    padding: const EdgeInsets.only(top: 8),
                     itemCount: docs.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
@@ -121,32 +176,68 @@ class _EarningsScreenState extends State<EarningsScreen> {
                       final ts = data['dateCompleted'];
                       DateTime date = DateTime.now();
                       if (ts is Timestamp) date = ts.toDate();
-                      else if (ts is DateTime) date = ts;
 
                       final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
                       final service = (data['serviceType'] as String?) ?? 'Service';
-                      final jobId = (data['jobId'] as String?) ?? data['bookingId'] ?? '—';
+                      final jobId = (data['jobId'] as String?) ?? '—';
                       final payoutStatus = (data['payoutStatus'] as String?) ?? 'unknown';
 
                       return ListTile(
-                        leading: Icon(
-                          payoutStatus.toLowerCase() == 'paid' ? Icons.check_circle_outline : Icons.hourglass_top,
-                          color: payoutStatus.toLowerCase() == 'paid' ? Colors.green : Colors.orange,
-                        ),
-                        title: Text('$service • ₹${amount.toStringAsFixed(2)}'),
-                        subtitle: Text('Job: $jobId\nCompleted: ${date.month}/${date.day}/${date.year}'),
-                        trailing: Text(
-                          payoutStatus.toUpperCase(),
-                          style: TextStyle(
-                            color: payoutStatus.toLowerCase() == 'paid' ? Colors.green : Colors.orange,
-                            fontWeight: FontWeight.bold,
+                        leading: CircleAvatar(
+                          backgroundColor: payoutStatus == 'paid' ? Colors.green.shade100 : Colors.orange.shade100,
+                          child: Icon(
+                            payoutStatus == 'paid' ? Icons.check : Icons.access_time,
+                            color: payoutStatus == 'paid' ? Colors.green : Colors.orange,
+                            size: 20,
                           ),
+                        ),
+                        title: Text('$service', style: const TextStyle(fontWeight: FontWeight.w500)),
+                        subtitle: Text('Job: $jobId\n${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}'),
+                        trailing: Text(
+                          '₹${amount.toStringAsFixed(2)}',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         isThreeLine: true,
                       );
                     },
                   );
                 },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper widget to build the summary cards
+  Widget _buildSummaryCard(String label, double amount, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            )
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            const SizedBox(height: 4),
+            Text(
+              '₹${amount.toStringAsFixed(2)}',
+              style: TextStyle(
+                color: color,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],

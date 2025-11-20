@@ -1,3 +1,4 @@
+// lib/screens/profile_screen.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -5,10 +6,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
-// --- NEW IMPORTS ---
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:url_launcher/url_launcher.dart';
-// -------------------
+// --- NEW IMPORTS for UI ---
+import '../main.dart';
+import '../widgets/app_button.dart';
+import '../widgets/app_text_field.dart';
+// -------------------------
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -18,6 +22,9 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  // --- Validation Key ---
+  final _formKey = GlobalKey<FormState>();
+  
   // --- Personal Info ---
   final _fullNameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -53,9 +60,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isTogglingNotifications = false;
-  bool _isConnectingStripe = false; // NEW: Loading state for Stripe
+  bool _isConnectingStripe = false;
 
-  // --- MODIFIED: Demo Mode Stripe Connection ---
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+  
+  // --- VALIDATION FUNCTIONS ---
+  String? _validateFullName(String? value) {
+    if (value == null || value.trim().isEmpty) return 'Full Name is required';
+    final cleanedValue = value.trim();
+    if (cleanedValue.length < 3) return 'Name must be at least 3 characters';
+    const pattern = r"^[a-zA-Z\s'-]+$";
+    final regExp = RegExp(pattern);
+    if (!regExp.hasMatch(cleanedValue)) return 'Name can only contain letters, spaces, hyphens, or apostrophes.';
+    return null;
+  }
+
+  String? _validatePhone(String? value) {
+    if (value == null || value.trim().isEmpty) return null; // Optional field
+    final cleanedValue = value.trim().replaceAll(RegExp(r'[\s-]'), '');
+    const pattern = r'^(?:\+91)?[0-9]{10}$'; 
+    final regExp = RegExp(pattern);
+    if (!regExp.hasMatch(cleanedValue)) return 'Enter a valid 10-digit Indian phone number';
+    return null;
+  }
+  // ----------------------------
+
   Future<void> _connectStripe() async {
     setState(() => _isConnectingStripe = true);
     try {
@@ -63,8 +96,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await Future.delayed(const Duration(seconds: 2));
 
       // 2. REAL FIREBASE UPDATE
-      // We manually update the database to say "Yes, this user is connected"
-      // This allows you to demonstrate the UI state change.
       await FirebaseFirestore.instance
           .collection('therapists')
           .doc(_uid)
@@ -88,8 +119,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) setState(() => _isConnectingStripe = false);
     }
   }
-  // --------------------------------
-  // --------------------------------
 
   Future<void> _getAndSaveToken() async {
     final token = await FirebaseMessaging.instance.getToken();
@@ -129,12 +158,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } finally {
       if (mounted) setState(() => _isTogglingNotifications = false);
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserData();
   }
 
   Future<void> _loadUserData() async {
@@ -186,6 +209,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _saveChanges() async {
+    // RUN VALIDATION
+    if (!_formKey.currentState!.validate()) return;
+    
     setState(() { _isSaving = true; });
     try {
       String? newKycFileUrl; 
@@ -202,7 +228,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'services': _servicesMap,
         'workingHours': _selectedHours, 
         'availableDays': _selectedDays, 
-        'maxDistance': _maxDistance,   
+        'maxDistance': _maxDistance,  // FIX: Removed illegal non-ASCII space character here
       };
 
       if (newKycFileUrl != null) dataToUpdate['kycDocumentUrl'] = newKycFileUrl;
@@ -230,137 +256,285 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
+  // ----------------------------------------
+  // UI HELPER FUNCTIONS for Floating Cards
+  // ----------------------------------------
+  
+  // Helper to create the floating card container
+  Widget _buildInfoCard({required String title, required List<Widget> children, required ColorScheme theme}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: cardSurfaceColor,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.15),
+            spreadRadius: 2,
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: theme.onBackground,
+            ),
+          ),
+          const Divider(height: 20),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  // Helper for displaying simple info rows (used for hours/distance status)
+  Widget _buildInfoRow(String label, Widget child, ColorScheme theme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: theme.onBackground.withOpacity(0.7), fontWeight: FontWeight.w500)),
+          child,
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------
+  //              BUILD METHOD
+  // ----------------------------------------
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context).colorScheme;
+
     return Scaffold(
+      backgroundColor: softBackgroundBlue,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(24.0),
+              child: Form(
+                key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Personal Info', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
-                    TextFormField(controller: _fullNameController, decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder())),
-                    const SizedBox(height: 16),
-                    TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder()), keyboardType: TextInputType.phone),
-
-                    const SizedBox(height: 24),
-                    const Text('Availability & Radius', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // 1. PERSONAL INFO CARD (Uses AppTextField.validated)
+                    _buildInfoCard(
+                      theme: theme,
+                      title: 'Personal Info',
                       children: [
-                        const Text('Working Hours:', style: TextStyle(fontSize: 16)),
-                        DropdownButton<String>(
-                          value: _selectedHours,
-                          items: const [
-                            DropdownMenuItem(value: '9:00 AM - 5:00 PM', child: Text('9:00 AM - 5:00 PM')),
-                            DropdownMenuItem(value: '10:00 AM - 7:00 PM', child: Text('10:00 AM - 7:00 PM')),
-                            DropdownMenuItem(value: '1:00 PM - 9:00 PM', child: Text('1:00 PM - 9:00 PM')),
-                          ],
-                          onChanged: (String? newValue) {
-                            if (newValue != null) setState(() { _selectedHours = newValue; });
+                        AppTextField.validated(
+                          controller: _fullNameController,
+                          hint: 'Full Name',
+                          validator: _validateFullName,
+                        ),
+                        const SizedBox(height: 16),
+                        AppTextField.validated(
+                          controller: _phoneController,
+                          hint: 'Phone Number',
+                          keyboardType: TextInputType.phone,
+                          validator: _validatePhone,
+                        ),
+                      ],
+                    ),
+
+                    // 2. AVAILABILITY & RADIUS CARD
+                    _buildInfoCard(
+                      theme: theme,
+                      title: 'Availability & Radius',
+                      children: [
+                        // Working Hours Dropdown
+                        _buildInfoRow(
+                          'Working Hours:',
+                          DropdownButton<String>(
+                            value: _selectedHours,
+                            items: const [
+                              DropdownMenuItem(value: '9:00 AM - 5:00 PM', child: Text('9:00 AM - 5:00 PM')),
+                              DropdownMenuItem(value: '10:00 AM - 7:00 PM', child: Text('10:00 AM - 7:00 PM')),
+                              DropdownMenuItem(value: '1:00 PM - 9:00 PM', child: Text('1:00 PM - 9:00 PM')),
+                            ],
+                            onChanged: (String? newValue) {
+                              if (newValue != null) setState(() { _selectedHours = newValue; });
+                            },
+                            style: TextStyle(color: theme.primary, fontWeight: FontWeight.bold),
+                            icon: Icon(Icons.arrow_drop_down, color: theme.primary),
+                          ),
+                          theme,
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Available Days Chips
+                        const Text('Available Days:', style: TextStyle(fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8.0,
+                          children: _daysOfWeek.map((day) {
+                            final isSelected = _selectedDays.contains(day);
+                            return FilterChip(
+                              label: Text(day),
+                              selected: isSelected,
+                              onSelected: (bool selected) {
+                                setState(() {
+                                  if (selected) _selectedDays.add(day);
+                                  else _selectedDays.remove(day);
+                                });
+                              },
+                              backgroundColor: theme.outlineVariant.withOpacity(0.5),
+                              selectedColor: theme.primary.withOpacity(0.15),
+                              labelStyle: TextStyle(
+                                color: isSelected ? theme.primary : theme.onBackground.withOpacity(0.7),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              checkmarkColor: theme.primary,
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Max Distance Slider
+                        Text('Max Travel Distance: ${_maxDistance.round()} km', 
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: theme.onBackground)),
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: theme.primary,
+                            inactiveTrackColor: theme.outlineVariant,
+                            thumbColor: theme.primary,
+                            overlayColor: theme.primary.withOpacity(0.2),
+                            valueIndicatorColor: theme.primary,
+                            valueIndicatorTextStyle: TextStyle(color: theme.onPrimary),
+                            trackHeight: 4.0,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
+                          ),
+                          child: Slider(
+                            value: _maxDistance, 
+                            min: 5, 
+                            max: 100, 
+                            divisions: 19, 
+                            label: _maxDistance.round().toString(),
+                            onChanged: (double value) { setState(() { _maxDistance = value; }); },
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    // 3. MY SERVICES CARD
+                    _buildInfoCard(
+                      theme: theme,
+                      title: 'My Services',
+                      children: [
+                        ListView.builder(
+                          shrinkWrap: true, 
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _allServices.length,
+                          itemBuilder: (context, index) {
+                            final serviceName = _allServices[index];
+                            return CheckboxListTile(
+                              title: Text(serviceName, style: TextStyle(color: theme.onBackground)),
+                              value: _servicesMap[serviceName] ?? false,
+                              onChanged: (bool? newValue) { setState(() { _servicesMap[serviceName] = newValue ?? false; }); },
+                              activeColor: secondaryGreenGradientEnd,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              contentPadding: EdgeInsets.zero,
+                            );
                           },
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    const Text('Available Days:', style: TextStyle(fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8.0,
-                      children: _daysOfWeek.map((day) {
-                        return FilterChip(
-                          label: Text(day),
-                          selected: _selectedDays.contains(day),
-                          onSelected: (bool selected) {
-                            setState(() {
-                              if (selected) _selectedDays.add(day);
-                              else _selectedDays.remove(day);
-                            });
-                          },
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('Max Travel Distance: ${_maxDistance.round()} km', style: const TextStyle(fontSize: 16)),
-                    Slider(
-                      value: _maxDistance, min: 5, max: 100, divisions: 19, label: _maxDistance.round().toString(),
-                      onChanged: (double value) { setState(() { _maxDistance = value; }); },
-                    ),
-                    
-                    const SizedBox(height: 24),
-                    const Text('My Services', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
-                    ListView.builder(
-                      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _allServices.length,
-                      itemBuilder: (context, index) {
-                        final serviceName = _allServices[index];
-                        return CheckboxListTile(
-                          title: Text(serviceName),
-                          value: _servicesMap[serviceName] ?? false,
-                          onChanged: (bool? newValue) { setState(() { _servicesMap[serviceName] = newValue ?? false; }); },
-                        );
-                      },
-                    ),
 
-                    const SizedBox(height: 24),
-                    const Text('KYC Documents', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
-                    OutlinedButton.icon(icon: const Icon(Icons.upload_file), label: const Text('Upload New Document'), onPressed: _pickFile),
-                    const SizedBox(height: 8),
-                    Text(
-                      _newKycFile != null ? 'New file selected: ${_newKycFile!.name}' : _currentKycDocInfo,
-                      style: const TextStyle(fontStyle: FontStyle.italic), textAlign: TextAlign.center,
+                    // 4. KYC DOCUMENTS CARD
+                    _buildInfoCard(
+                      theme: theme,
+                      title: 'KYC Documents',
+                      children: [
+                        Text(_currentKycDocInfo, style: TextStyle(fontStyle: FontStyle.italic, color: theme.outline)),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          icon: Icon(_newKycFile == null ? Icons.upload_file : Icons.check_circle_outline, color: theme.primary),
+                          label: Text(_newKycFile != null ? 'File Selected: ${_newKycFile!.name}' : 'Upload New Document'), 
+                          onPressed: _pickFile,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: theme.primary,
+                            side: BorderSide(color: theme.primary),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ],
                     ),
                     
-                    const SizedBox(height: 24),
-                    const Text('Notifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // 5. NOTIFICATIONS CARD
+                    _buildInfoCard(
+                      theme: theme,
+                      title: 'Notifications',
                       children: [
-                        Text('Status: $_fcmTokenStatus', style: TextStyle(color: _fcmTokenStatus == 'Enabled' ? Colors.green : Colors.red)),
+                        _buildInfoRow(
+                          'FCM Status:',
+                          Text(_fcmTokenStatus, style: TextStyle(color: _fcmTokenStatus == 'Enabled' ? secondaryGreenGradientEnd : theme.error, fontWeight: FontWeight.bold)),
+                          theme,
+                        ),
+                        const SizedBox(height: 12),
                         ElevatedButton.icon(
                           icon: Icon(_fcmTokenStatus == 'Enabled' ? Icons.notifications_off : Icons.notifications_active),
                           onPressed: _isTogglingNotifications ? null : _toggleNotifications,
                           label: _isTogglingNotifications 
-                              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                              : Text(_fcmTokenStatus == 'Enabled' ? 'Disable' : 'Enable'),
+                              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: cardSurfaceColor))
+                              : Text(_fcmTokenStatus == 'Enabled' ? 'Disable Notifications' : 'Enable Notifications'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _fcmTokenStatus == 'Enabled' ? Colors.red.shade50 : null,
-                            foregroundColor: _fcmTokenStatus == 'Enabled' ? Colors.red : null,
+                            // FIX: Using red.shade400 instead of theme.error.shade400
+                            backgroundColor: _fcmTokenStatus == 'Enabled' ? Colors.red.shade400 : theme.primary,
+                            foregroundColor: cardSurfaceColor,
                           ),
                         ),
                       ],
                     ),
 
-                    // --- UPDATED: Payout Settings Section ---
-                    const SizedBox(height: 24),
-                    const Text('Payout Settings (Stripe Connect)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Divider(),
-                    Text(_stripeAccountId.isEmpty ? 'Status: Not Connected' : _payoutsEnabled ? 'Status: Ready for Payouts' : 'Status: Verification Pending',
-                      style: TextStyle(color: _payoutsEnabled ? Colors.green : Colors.red),
+                    // 6. PAYOUT SETTINGS CARD
+                    _buildInfoCard(
+                      theme: theme,
+                      title: 'Payout Settings (Stripe Connect)',
+                      children: [
+                        _buildInfoRow(
+                          'Connection Status:',
+                          Text(
+                            _stripeAccountId.isEmpty 
+                                ? 'Not Connected' 
+                                : _payoutsEnabled 
+                                    ? 'Ready for Payouts' 
+                                    : 'Verification Pending',
+                            style: TextStyle(
+                              color: _payoutsEnabled ? secondaryGreenGradientEnd : theme.error,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          theme,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _isConnectingStripe ? null : _connectStripe,
+                          child: _isConnectingStripe
+                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: cardSurfaceColor))
+                              : Text(_stripeAccountId.isEmpty ? 'Connect Bank Account' : 'Manage Account'),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      // Call the new Stripe logic
-                      onPressed: _isConnectingStripe ? null : _connectStripe,
-                      child: _isConnectingStripe
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : Text(_stripeAccountId.isEmpty ? 'Connect Bank Account' : 'Manage Account'),
-                    ),
-                    // -----------------------------
 
-                    const SizedBox(height: 24),
-                    ElevatedButton(
+                    // --- FINAL SAVE BUTTON ---
+                    const SizedBox(height: 10),
+                    AppButton(
+                      label: _isSaving ? 'Saving Changes…' : 'Save All Changes',
                       onPressed: _isSaving ? null : _saveChanges,
-                      child: _isSaving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Save All Changes'),
                     ),
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),

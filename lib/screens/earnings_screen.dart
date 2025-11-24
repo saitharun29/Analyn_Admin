@@ -155,7 +155,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
                             Text(
                               'No recorded transactions yet.',
                               style: TextStyle(
-                                color: theme.onBackground.withOpacity(0.8),
+                                color: theme.onSurface.withOpacity(0.8),
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold, // Applied Font Style
                               ),
@@ -288,7 +288,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
             size: 20,
           ),
         ),
-        title: Text(service, style: TextStyle(fontWeight: FontWeight.w600, color: theme.onBackground)),
+        title: Text(service, style: TextStyle(fontWeight: FontWeight.w600, color: theme.onSurface)),
         subtitle: Text('Job: $jobId • ${date.day}/${date.month}/${date.year}'),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -296,7 +296,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
           children: [
             Text(
               '₹${amount.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.onBackground),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.onSurface),
             ),
             const SizedBox(height: 4),
             Text(

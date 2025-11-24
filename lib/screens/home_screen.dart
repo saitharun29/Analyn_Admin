@@ -17,9 +17,9 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   
   static const List<Widget> _pages = <Widget>[
-    const JobsScreen(),
-    const EarningsScreen(),
-    const ProfileScreen(),
+    JobsScreen(),
+    EarningsScreen(),
+    ProfileScreen(),
   ];
 
   void _onItemTapped(int index) => setState(() => _selectedIndex = index);

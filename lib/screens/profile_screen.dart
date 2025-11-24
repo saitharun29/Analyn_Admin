@@ -184,12 +184,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _payoutsEnabled = data['payoutsEnabled'] ?? false;
 
         final fcmToken = data['fcmToken'];
-        if (fcmToken != null && fcmToken.isNotEmpty) _fcmTokenStatus = "Enabled";
-        else _fcmTokenStatus = "Disabled";
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          _fcmTokenStatus = "Enabled";
+        } else {
+          _fcmTokenStatus = "Disabled";
+        }
         
         final kycUrl = data['kycDocumentUrl'];
-        if (kycUrl != null && (kycUrl as String).isNotEmpty) _currentKycDocInfo = "A document is on file.";
-        else _currentKycDocInfo = "No document submitted.";
+        if (kycUrl != null && (kycUrl as String).isNotEmpty) {
+          _currentKycDocInfo = "A document is on file.";
+        } else {
+          _currentKycDocInfo = "No document submitted.";
+        }
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
@@ -285,7 +291,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: theme.onBackground,
+              color: theme.onSurface,
             ),
           ),
           const Divider(height: 20),
@@ -302,7 +308,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: theme.onBackground.withOpacity(0.7), fontWeight: FontWeight.w500)),
+          Text(label, style: TextStyle(color: theme.onSurface.withOpacity(0.7), fontWeight: FontWeight.w500)),
           child,
         ],
       ),
@@ -385,14 +391,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               selected: isSelected,
                               onSelected: (bool selected) {
                                 setState(() {
-                                  if (selected) _selectedDays.add(day);
-                                  else _selectedDays.remove(day);
+                                  if (selected) {
+                                    _selectedDays.add(day);
+                                  } else {
+                                    _selectedDays.remove(day);
+                                  }
                                 });
                               },
                               backgroundColor: theme.outlineVariant.withOpacity(0.5),
                               selectedColor: theme.primary.withOpacity(0.15),
                               labelStyle: TextStyle(
-                                color: isSelected ? theme.primary : theme.onBackground.withOpacity(0.7),
+                                color: isSelected ? theme.primary : theme.onSurface.withOpacity(0.7),
                                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                               ),
                               checkmarkColor: theme.primary,
@@ -403,7 +412,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                         // Max Distance Slider
                         Text('Max Travel Distance: ${_maxDistance.round()} km', 
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: theme.onBackground)),
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: theme.onSurface)),
                         SliderTheme(
                           data: SliderTheme.of(context).copyWith(
                             activeTrackColor: theme.primary,
@@ -439,7 +448,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           itemBuilder: (context, index) {
                             final serviceName = _allServices[index];
                             return CheckboxListTile(
-                              title: Text(serviceName, style: TextStyle(color: theme.onBackground)),
+                              title: Text(serviceName, style: TextStyle(color: theme.onSurface)),
                               value: _servicesMap[serviceName] ?? false,
                               onChanged: (bool? newValue) { setState(() { _servicesMap[serviceName] = newValue ?? false; }); },
                               activeColor: secondaryGreenGradientEnd,

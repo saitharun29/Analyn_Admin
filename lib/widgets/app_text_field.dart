@@ -48,7 +48,7 @@ class AppTextField extends StatelessWidget {
         obscureText: obscure,
         validator: validator,
         keyboardType: keyboardType,
-        style: TextStyle(color: theme.onBackground),
+        style: TextStyle(color: theme.onSurface),
         // Decoration is now largely handled by InputDecorationTheme in main.dart
         // We can override specific properties if needed, but let's rely on the theme for now.
         decoration: InputDecoration(

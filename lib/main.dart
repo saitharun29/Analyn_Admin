@@ -4,20 +4,18 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'app_router.dart';
 import 'screens/splash_screen.dart';
+import 'package:firebase_app_check/firebase_app_check.dart'; // Required for security
 
-// --- Define the New Gradient and Color Palette ---
-// These colors are extracted or approximated from the provided image.
+// --- Define the New Gradient and Color Palette (for the UI) ---
 const Color primaryBlueGradientStart = Color(0xFF6DD5ED); // Lighter blue
 const Color primaryBlueGradientEnd = Color(0xFF2193B0);   // Darker blue
-const Color secondaryGreenGradientStart = Color(0xFF83E8DD); // Lighter green/teal
-const Color secondaryGreenGradientEnd = Color(0xFF6CCECB);   // Darker green/teal
-
+const Color secondaryGreenGradientEnd = Color(0xFF6CCECB);   // Darker green/teal for secondary accents
 const Color softBackgroundBlue = Color(0xFFE3F2FD); // Very light blue for overall background
 const Color cardSurfaceColor = Color(0xFFFFFFFF);    // White for elevated cards/inputs
 const Color darkTextColor = Color(0xFF263238);       // Dark gray for primary text
 const Color lightTextColor = Color(0xFFB0BEC5);      // Light gray for hints/secondary text
 
-// Define the main gradient to be used in AppBars, etc.
+// Define the main gradient to be used in AppBars and buttons.
 final LinearGradient mainAppGradient = LinearGradient(
   colors: [primaryBlueGradientStart, primaryBlueGradientEnd],
   begin: Alignment.topLeft,
@@ -26,17 +24,33 @@ final LinearGradient mainAppGradient = LinearGradient(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 1. Initialize Firebase Core
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // 2. Initialize Firebase App Check (Crucial for secure connections)
+  // NOTE: 'YOUR_RECAPTCHA_SITE_KEY_HERE' should be replaced if building for web.
+  await FirebaseAppCheck.instance.activate(
+    androidProvider: AndroidProvider.debug, // Use .debug for emulator/debug testing
+    webProvider: ReCaptchaV3Provider('YOUR_RECAPTCHA_SITE_KEY_HERE'), 
+  );
+  
   // debug: confirm init in console
   // ignore: avoid_print
   print('Firebase initialized: ${Firebase.apps.map((a) => a.name).toList()}');
+  
+  // FIX: Run the application with the defined class
   runApp(const TherapistApp());
 }
 
+// ----------------------------------------------------
+// FIX: CLASS DEFINITION ADDED HERE
+// ----------------------------------------------------
 class TherapistApp extends StatelessWidget {
   const TherapistApp({super.key});
+  
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -45,50 +59,43 @@ class TherapistApp extends StatelessWidget {
         useMaterial3: true,
         // --- CUSTOM COLOR SCHEME ---
         colorScheme: ColorScheme.light(
-          primary: primaryBlueGradientEnd, // Use the darker blue as primary for consistency
+          primary: primaryBlueGradientEnd, // Darker blue for primary actions
           onPrimary: cardSurfaceColor,     // White text on primary buttons
-          surface: cardSurfaceColor,       // White for cards, text fields (inner part)
-          background: softBackgroundBlue,  // Overall Scaffold background (light blue)
-          onBackground: darkTextColor,     // Main text color
-          error: Colors.red.shade700,      // Error text/indicators
-          // Other surface containers
+          surface: cardSurfaceColor,  // Overall Scaffold background
+          onSurface: darkTextColor,     // Main text color
+          error: Colors.red.shade700,      
           surfaceContainer: cardSurfaceColor, 
           surfaceContainerLow: cardSurfaceColor, 
-          // Outline colors for text fields
           outline: Colors.grey.shade300,
           outlineVariant: Colors.grey.shade200,
         ),
-        // Configure ElevatedButton to use the primary color, but we'll apply gradient directly later
+        // Configure ElevatedButton Theme for the gradient style
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: primaryBlueGradientEnd, // Default if not overridden by gradient
+            backgroundColor: primaryBlueGradientEnd, 
             foregroundColor: cardSurfaceColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), // More rounded
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), 
           ),
         ),
-        // Set AppBar theme to use a gradient background (requires custom implementation)
-        appBarTheme: AppBarTheme(
-          elevation: 0, // No default elevation, we'll add shadow manually if needed
+        // Set AppBar theme (used when not overridden by a Stack/Gradient)
+        appBarTheme: const AppBarTheme(
+          elevation: 0, 
           titleTextStyle: TextStyle(
-            color: cardSurfaceColor, // White text on gradient app bar
+            color: cardSurfaceColor,
             fontSize: 20,
             fontWeight: FontWeight.w600,
           ),
-          iconTheme: IconThemeData(color: cardSurfaceColor), // White back button
-          actionsIconTheme: IconThemeData(color: cardSurfaceColor), // White action icons
-          toolbarTextStyle: TextStyle(color: cardSurfaceColor),
-          // For the actual gradient, we'll need to wrap AppBar in a FlexibleSpaceBar/Container
-          // or create a custom PreferredSizeWidget for full control.
-          // For simplicity, we'll use a `FlexibleSpaceBar` in screens where needed.
+          iconTheme: IconThemeData(color: cardSurfaceColor),
+          actionsIconTheme: IconThemeData(color: cardSurfaceColor),
         ),
-        // Input decoration theme for text fields
+        // Input decoration theme for the floating card style
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: cardSurfaceColor,
           hintStyle: TextStyle(color: lightTextColor),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16), // More rounded
-            borderSide: BorderSide.none, // No border by default, use shadow for depth
+            borderRadius: BorderRadius.circular(16), 
+            borderSide: BorderSide.none, 
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
@@ -96,7 +103,7 @@ class TherapistApp extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: primaryBlueGradientStart, width: 2), // Focus border with a gradient color
+            borderSide: BorderSide(color: primaryBlueGradientStart, width: 2),
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),

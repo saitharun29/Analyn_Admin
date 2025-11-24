@@ -10,21 +10,28 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  firebase_core: ^3.8.0
-  firebase_auth: ^5.3.3
-  cloud_firestore: ^5.5.0
-  firebase_storage: ^12.3.6
-  firebase_messaging: 15.2.10
+  
+  # --- Firebase Core ---
+  firebase_core: ^4.2.1        # Updated to a stable, null-safe version
+  firebase_auth: ^6.1.2        # Updated
+  cloud_firestore: ^6.1.0      # Updated
+  firebase_storage: ^13.0.4    # Updated
+  firebase_messaging: ^16.0.4  # Updated
+  firebase_app_check: ^0.4.1+2 # Necessary for security, ensure this is present
+  
+  # --- UI & Utilities ---
   google_fonts: ^6.2.1
   provider: ^6.1.2
-  file_picker: ^8.0.7
+  file_picker: ^10.3.7         # Updated
   cupertino_icons: ^1.0.8
-  cloud_functions: ^5.6.2
+  
+  # --- Services & Plugins ---
+  cloud_functions: ^6.0.4
+  url_launcher: ^6.3.1         # Use the top-level package
+  geolocator: ^14.0.2          # Updated
+  flutter_blue_plus: ^2.0.2    # Updated
 
-
-  url_launcher: ^6.3.1
-  geolocator: ^13.0.1
-  flutter_blue_plus: ^1.35.5
+# Remove the dependency_overrides section if you added it earlier.
 
 dev_dependencies:
   flutter_test:

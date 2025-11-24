@@ -25,7 +25,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
           .orderBy('dateCompleted', descending: true)
           .snapshots();
 
-  // --- UPDATED CALCULATION LOGIC ---
+  // --- UPDATED CALCULATION LOGIC (FIXED) ---
   Map<String, double> _computeTotalsFromDocs(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
     double daily = 0.0;
@@ -42,6 +42,11 @@ class _EarningsScreenState extends State<EarningsScreen> {
     for (var doc in docs) {
       final data = doc.data();
       final amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
+      final payoutStatus = data['payoutStatus'] as String? ?? 'pending';
+      
+      // --- CRITICAL FIX: Skip transaction if payoutStatus is not 'paid' ---
+      if (payoutStatus != 'paid') continue;
+      // ---------------------------------------------------------------------
 
       final ts = data['dateCompleted'];
       DateTime? date;
@@ -155,7 +160,7 @@ class _EarningsScreenState extends State<EarningsScreen> {
                             Text(
                               'No recorded transactions yet.',
                               style: TextStyle(
-                                color: theme.onSurface.withOpacity(0.8),
+                                color: theme.onBackground.withOpacity(0.8),
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold, // Applied Font Style
                               ),
